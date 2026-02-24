@@ -1,0 +1,8 @@
+.gen-grid { display: grid; grid-template-columns: repeat(3, 1fr) !important; gap: 15px; overflow-y: auto; align-content: start; }
+.gen-input { font-size: 16px !important; font-weight: 700; padding: 12px 16px; border-radius: 12px; border: 2px solid #f1f5f9; background: #f8fafc; width: 100%; outline: none; }
+.gen-input:focus { border-color: #3b82f6; background: white; }
+.gen-label { font-size: 10px; font-weight: 900; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; display: block; }
+.tag-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; overflow-y: auto; }
+.tag-pill { font-size: 13px !important; font-weight: 800; padding: 6px 12px; border-radius: 10px; border: 2px solid #e2e8f0; background: white; text-transform: uppercase; }
+.field-1 { border-left: 6px solid #3b82f6 !important; }
+.field-2 { border-left: 6px solid #a855f7 !important; }

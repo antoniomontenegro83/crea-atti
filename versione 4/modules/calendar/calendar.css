@@ -1,0 +1,11 @@
+/* --- modules/calendar/calendar.css --- */
+.cal-grid { 
+    display: grid; 
+    grid-template-columns: repeat(7, 1fr); 
+    gap: 8px; 
+}
+
+/* Effetto pressione */
+.cal-grid > div:active {
+    transform: scale(0.95);
+}
