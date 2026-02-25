@@ -65,7 +65,6 @@ const core = {
             title.innerText = 'Dashboard';
 
         } else if (modId === 'templates' && typeof generator !== 'undefined') {
-            // Carica il modulo generator e apre direttamente il tab Editor Template
             container.innerHTML = generator.html;
             generator.init();
             generator.tab('editor');
