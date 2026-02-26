@@ -1,4 +1,9 @@
 /* --- modules/generator/generator.js --- */
+
+// Normalizza nomi CDN (unpkg esporta minuscolo, alcuni build PascalCase)
+if (typeof Docxtemplater === 'undefined' && typeof docxtemplater !== 'undefined') window.Docxtemplater = docxtemplater;
+if (typeof PizZip === 'undefined' && typeof pizzip !== 'undefined') window.PizZip = pizzip;
+
 const generator = {
     _pendingDocs: [],
     _pendingRendered: [],
@@ -377,20 +382,23 @@ const generator = {
     extractTags: (text) => {
         const found = [];
         let m;
-        const re = /\{\{([^}]+)\}\}|\{([^}]+)\}/g;
+        const re = /\{\{([^}]+)\}\}/g;
         while ((m = re.exec(text)) !== null) {
-            const name = (m[1] || m[2]).trim();
+            const name = generator._normKey(m[1]);
             if (name) found.push(name);
         }
         return Array.from(new Set(found));
     },
 
     replaceTags: (text, data) => {
-        return text.replace(/\{\{([^}]+)\}\}|\{([^}]+)\}/g, (match, d1, d2) => {
-            const key = (d1 || d2).trim();
+        return text.replace(/\{\{([^}]+)\}\}/g, (match, d1) => {
+            const key = generator._normKey(d1);
             return (data[key] !== undefined && data[key] !== '') ? data[key] : `[${key}]`;
         });
     },
+
+    // Normalizza nome tag: trim + spazi→underscore (usato ovunque)
+    _normKey: (s) => (s||'').trim().replace(/\s+/g, '_'),
 
     // ─────────────────────────────────────────────
     //  INIT
@@ -544,23 +552,30 @@ const generator = {
         let sourceHtml = tpl.bodyHtml || null;
         let sourcePlain = tpl.body    || null;
 
-        // Funzione che sostituisce i tag {x} e {{x}} dentro una stringa HTML
-        // senza toccare i tag HTML stessi
+        // Sostituisce {campo} e {{campo}} nell'HTML dell'anteprima.
+        // Usa regex che attraversa eventuali tag HTML dentro le graffe
+        // (Word spesso spezza {campo} con <em>, <strong> ecc. in mezzo).
         const replaceInHtml = (html) => {
-            // Lavora solo sui nodi testo: splitta su segmenti HTML vs testo
-            return html.replace(/(<[^>]+>)|([^<]+)/g, (match, tag, text) => {
-                if(tag) return tag; // nodo HTML: non toccare
-                if(!text) return '';
-                // Sul testo: sostituisci i tag {campo} e {{campo}}
-                return text.replace(/\{\{([^}]+)\}\}|\{([^}]+)\}/g, (m, d1, d2) => {
-                    const key=(d1||d2).trim();
-                    const val=data[key];
-                    if(val&&val.trim()!==''){
-                        return `<span class="preview-filled">${val.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
-                    } else {
-                        return `<span class="preview-tag">${m}</span>`;
-                    }
-                });
+            // Word spezza {{ nome }} su più run: <strong>{{</strong><strong>nome</strong><strong>}}</strong>
+            // e perfino le }} in run separati: <strong>}</strong><strong>}</strong>
+            // Pre-passo: rimuove tag HTML tra { e {, tra } e }, e dentro il nome
+            let h = html;
+            h = h.replace(/\{(<[^>]+>)+\{/g, '{{');           // {<html>{ → {{
+            h = h.replace(/\}(<[^>]+>)+\}/g, '}}');           // }<html>} → }}
+            // Ora collassa HTML dentro {{...}}
+            h = h.replace(/\{\{((?:[^{}]|<[^>]+>)*?)\}\}/g, (m, inner) => {
+                const name = inner.replace(/<[^>]+>/g,'').replace(/\s+/g,'_').trim();
+                return name ? `{{${name}}}` : m;
+            });
+            // Ora sostituisci i tag con i valori
+            return h.replace(/\{\{([^{}]+)\}\}/g, (m, key) => {
+                const k = generator._normKey(key);
+                const val = data[k];
+                if (val && val.trim() !== '') {
+                    return `<span class="preview-filled">${val.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+                } else {
+                    return `<span class="preview-tag">{{${key}}}</span>`;
+                }
             });
         };
 
@@ -601,8 +616,8 @@ const generator = {
                 ${replaceInHtml(sourceHtml)}`;
         } else if(sourcePlain){
             const escaped=sourcePlain.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            const rendered=escaped.replace(/\{\{([^}]+)\}\}|\{([^}]+)\}/g,(m,d1,d2)=>{
-                const key=(d1||d2).trim();
+            const rendered=escaped.replace(/\{\{([^}]+)\}\}/g,(m,d1)=>{
+                const key=generator._normKey(d1);
                 const val=data[key];
                 return val&&val.trim()!==''
                     ? `<span class="preview-filled">${val}</span>`
@@ -703,8 +718,67 @@ const generator = {
                     const fh=await core.dirHandle.getFileHandle(item.tpl.file);
                     const buf=await (await fh.getFile()).arrayBuffer();
                     const zip=new PizZip(buf);
-                    const doc=new Docxtemplater(zip,{paragraphLoop:true,linebreaks:true});
-                    doc.render(data);
+
+                    // Fix tag spezzati su più run da Word
+                    // Word scrive {{ in un run, il nome in un altro, }} in un altro ancora.
+                    // Questa funzione li riassembla in un unico <w:t>{{nome}}</w:t>
+                    const docXmlFile = zip.file('word/document.xml');
+                    let docXml = docXmlFile ? docXmlFile.asText() : '';
+                    if (docXmlFile) {
+                        // Per ogni paragrafo che contiene {{, collassa tutti i run
+                        // in un unico run con il testo unito e i tag normalizzati.
+                        // Questo risolve il problema di Word che spezza {{ nome }}
+                        // su run multipli con formattazione/proofErr diversi.
+                        docXml = docXml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, para => {
+                            // Estrai tutto il testo del paragrafo
+                            const plain = [...para.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
+                                .map(x => x[1]).join('');
+                            if (!plain.includes('{{')) return para; // nessun tag: lascia intatto
+
+                            // Prendi pPr (formato paragrafo)
+                            const pprM = para.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
+                            const ppr  = pprM ? pprM[0] : '';
+
+                            // Prendi rPr del primo run (formato testo)
+                            const rprM = para.match(/<w:r[ >][\s\S]*?<w:rPr>([\s\S]*?)<\/w:rPr>/);
+                            const rpr  = rprM ? '<w:rPr>' + rprM[1] + '</w:rPr>' : '';
+
+                            // Normalizza tag: {{nome con spazi}} → {{nome_con_spazi}}
+                            const text = plain.replace(/\{\{([^}]+)\}\}/g,
+                                (m, n) => '{{' + n.trim().replace(/\s+/g, '_') + '}}');
+
+                            // Apri paragrafo
+                            const pOpen = para.match(/<w:p[^>]*>/)[0];
+                            const run = '<w:r>' + rpr + '<w:t xml:space="preserve">' + text + '</w:t></w:r>';
+                            return pOpen + ppr + run + '</w:p>';
+                        });
+                        zip.file('word/document.xml', docXml);
+                    }
+
+                    // Pre-popola con '' i campi del docx non presenti in data
+                    const allTags = [...docXml.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1].trim());
+                    const dataFull = Object.assign({}, data);
+                    allTags.forEach(k => { if (dataFull[k] === undefined) dataFull[k] = ''; });
+
+                    const doc=new Docxtemplater(zip,{paragraphLoop:true,linebreaks:true,delimiters:{start:'{{',end:'}}'}});
+                    try {
+                        doc.render(dataFull);
+                    } catch(renderErr) {
+                        if (renderErr.properties && renderErr.properties.errors) {
+                            const details = renderErr.properties.errors.map(e => {
+                                const p = e.properties || {};
+                                return JSON.stringify({
+                                    explanation: p.explanation,
+                                    tag: p.tag,
+                                    offset: p.offset,
+                                    msg: e.message
+                                });
+                            }).join('\n');
+                            console.error('DOCX ERRORS:', details);
+                            alert('Dettaglio errore:\n' + details);
+                        }
+                        throw renderErr;
+                    }
                     blob=doc.getZip().generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
                 } else if(item.tpl.body){
                     blob=generator.buildDocxFromBody(item.tpl.body,data);
@@ -1120,9 +1194,15 @@ const generator = {
             const zip=new PizZip(buf);
             const xml=zip.file('word/document.xml')?.asText()||'';
 
-            // 1. Estrai campi (strip XML → testo piatto → regex)
-            const plainFlat=xml.replace(/<[^>]+>/g,'').replace(/\s+/g,' ');
-            const fields=generator.extractTags(plainFlat);
+            // 1. Estrai campi — unisce i w:t per ricostruire tag spezzati su più run
+            // Word spesso spezza {campo} in più run: {campo_ / autorizzativo}
+            // Unisce tutti i w:t per ricostruire tag spezzati su più run
+            const allText = [...xml.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)]
+                .map(m => m[1]).join('');
+            const plainFlat = xml.replace(/<[^>]+>/g,'').replace(/\s+/g,' ');
+            const combined  = allText + ' ' + plainFlat;
+            // extractTags normalizza spazi → underscore automaticamente
+            const fields=generator.extractTags(combined);
 
             // 2. Body testuale per submit
             const paragraphs=xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g)||[];
@@ -1284,6 +1364,14 @@ const generator = {
                 break;
             }
         }
+        // Post-process: rimuove tag HTML spezzati dentro {campo}
+        // Word inserisce proofErr e altri elementi nel mezzo dei tag {campo}
+        // es: "{numero <em>atto</em> autorizzativo}" → "{numero atto autorizzativo}"
+        html = html.replace(/{([^{}]{0,300})}/g, (m, inner) => {
+            const clean = inner.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+            return clean ? '{' + clean + '}' : m;
+        });
+
         return html;
     },
 
