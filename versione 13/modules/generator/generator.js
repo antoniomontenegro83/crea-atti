@@ -33,6 +33,7 @@ const generator = {
                         <div id="slots-container" class="flex gap-3 flex-1 min-w-0 flex-wrap"></div>
                         <div class="flex gap-2 shrink-0">
                             <button onclick="generator.addSlot()" title="Aggiungi slot" class="w-10 h-10 bg-slate-100 text-slate-500 rounded-xl hover:bg-blue-600 hover:text-white transition-all text-sm"><i class="fas fa-plus"></i></button>
+                            <button onclick="generator.removeSlot()" title="Rimuovi slot" class="w-10 h-10 bg-slate-100 text-slate-500 rounded-xl hover:bg-red-500 hover:text-white transition-all text-sm"><i class="fas fa-minus"></i></button>
                             <button onclick="generator.tab('editor')" title="Gestisci modelli" class="w-10 h-10 bg-slate-900 text-white rounded-xl hover:bg-blue-600 transition-all text-sm"><i class="fas fa-cog"></i></button>
                         </div>
                     </div>
@@ -259,17 +260,7 @@ const generator = {
                 <p id="date-modal-field" class="text-[11px] font-bold text-blue-400 uppercase mb-5"></p>
                 <input type="date" id="date-picker" oninput="generator.updateDatePreview()" class="gen-input text-center text-lg mb-3">
                 <div id="date-letters-preview" class="text-center font-black text-blue-600 text-[15px] mb-5 min-h-[24px]"></div>
-                <div class="bg-slate-50 p-4 rounded-2xl border mb-5">
-                    <label class="gen-label mb-3 block">Calcola scadenza</label>
-                    <div class="flex gap-2 flex-wrap">
-                        <button onclick="generator.addDays(30)"  class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase hover:bg-blue-50 hover:border-blue-300 transition-all">+30gg</button>
-                        <button onclick="generator.addDays(60)"  class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase hover:bg-blue-50 hover:border-blue-300 transition-all">+60gg</button>
-                        <button onclick="generator.addDays(90)"  class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase hover:bg-blue-50 hover:border-blue-300 transition-all">+90gg</button>
-                        <button onclick="generator.addDays(180)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase hover:bg-blue-50 hover:border-blue-300 transition-all">+180gg</button>
-                        <button onclick="generator.addDays(365)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase hover:bg-blue-50 hover:border-blue-300 transition-all">+1 anno</button>
-                    </div>
-                    <div id="deadline-result" class="text-[12px] font-bold text-blue-500 mt-3 hidden"></div>
-                </div>
+
                 <label class="flex items-center gap-3 mb-6 cursor-pointer">
                     <input type="checkbox" id="date-format-letters" class="w-4 h-4 accent-blue-600">
                     <span class="text-[12px] font-bold text-slate-600">Inserisci in lettere (es. quindici gennaio duemilaventicinque)</span>

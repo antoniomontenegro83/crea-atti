@@ -32,6 +32,10 @@ Object.assign(generator, {
         if (core.state.activeSlots < 4) { core.state.activeSlots++; generator.renderSlots(); generator.prepareForm(); }
     },
 
+    removeSlot: () => {
+        if (core.state.activeSlots > 1) { core.state.activeSlots--; generator.renderSlots(); generator.prepareForm(); }
+    },
+
     renderSlots: () => {
         const c = document.getElementById('slots-container');
         if (!c) return;
