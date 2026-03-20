@@ -1,0 +1,38 @@
+<div class="archive-container">
+    <div class="archive-header-actions">
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" id="archive-search" placeholder="Cerca tra i fascicoli..." oninput="archive.render()">
+        </div>
+        <div class="archive-stats-mini">
+            <span id="folder-count">0</span> Fascicoli caricati
+        </div>
+    </div>
+
+    <div id="folders-grid" class="folders-grid">
+        </div>
+</div>
+
+<div id="folder-detail" class="detail-overlay hidden">
+    <div class="detail-panel shadow-2xl">
+        <div class="detail-header">
+            <div>
+                <h2 id="detail-title">Nome Fascicolo</h2>
+                <p class="text-[10px] font-black text-blue-500 uppercase tracking-widest">Documenti Generati</p>
+            </div>
+            <button onclick="archive.closeDetail()" class="close-btn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="detail-body">
+            <table class="detail-table">
+                <thead>
+                    <tr>
+                        <th>Data Creazione</th>
+                        <th>Nome Atto</th>
+                        <th class="text-right">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody id="detail-rows"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
