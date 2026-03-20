@@ -175,17 +175,26 @@ Object.assign(generator, {
                 const fascNum2 = _sanitize(data['Fascicolo'] || data['fascicolo'] || data['FASCICOLO'] || '');
                 const annoFasc = _sanitize(data['anno_fascicolo'] || '');
 
+                // Estrae il tipo atto dal nome del file template (es. "AA", "AD", "DET")
+                // Cerca sequenza di 2-4 lettere maiuscole nel nome del template
+                const _tplType = () => {
+                    const src = (item.tpl.file || item.tpl.name || '').replace(/\.docx$/i, '');
+                    const m = src.match(/\b([A-Z]{2,4})\b/);
+                    return m ? m[1] : 'AT';
+                };
+
                 let filename;
                 if (numAtto && dataAtto && fascNum2) {
-                    // Formato completo: numero-AA-data-FASC_fascicolo_anno
+                    // Formato: numero-TIPO-data-FASC_fascicolo_anno
+                    const tipoAtto = _tplType();
                     const fascPart = annoFasc ? `${fascNum2}_${annoFasc}` : fascNum2;
-                    filename = `${numAtto}-AA-${dataAtto}-FASC_${fascPart}.docx`;
+                    filename = `${numAtto}-${tipoAtto}-${dataAtto}-FASC_${fascPart}.docx`;
                 } else {
                     // Fallback: nome template + data odierna
                     const baseName = item.tpl.file
                         ? item.tpl.file.replace(/\.docx$/i, '').replace(/\//g, '-').replace(/[\\:*?"<>|]/g, '-')
                         : item.tpl.name.replace(/[^a-zA-Z0-9_\-]/g, '_');
-                    filename = `${baseName}_${today.replace(/\//g, '-')}.docx`;
+                    filename = `${baseName}.docx`;
                 }
 
                 if (item.tpl.file) {

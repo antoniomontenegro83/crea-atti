@@ -175,17 +175,26 @@ Object.assign(generator, {
                 const fascNum2 = _sanitize(data['Fascicolo'] || data['fascicolo'] || data['FASCICOLO'] || '');
                 const annoFasc = _sanitize(data['anno_fascicolo'] || '');
 
+                // Estrae il tipo atto dal nome del file template (es. "AA", "AD", "DET")
+                // Cerca sequenza di 2-4 lettere maiuscole nel nome del template
+                const _tplType = () => {
+                    const src = (item.tpl.file || item.tpl.name || '').replace(/\.docx$/i, '');
+                    const m = src.match(/\b([A-Z]{2,4})\b/);
+                    return m ? m[1] : 'AT';
+                };
+
                 let filename;
                 if (numAtto && dataAtto && fascNum2) {
-                    // Formato completo: numero-AA-data-FASC_fascicolo_anno
+                    // Formato: numero-TIPO-data-FASC_fascicolo_anno
+                    const tipoAtto = _tplType();
                     const fascPart = annoFasc ? `${fascNum2}_${annoFasc}` : fascNum2;
-                    filename = `${numAtto}-AA-${dataAtto}-FASC_${fascPart}.docx`;
+                    filename = `${numAtto}-${tipoAtto}-${dataAtto}-FASC_${fascPart}.docx`;
                 } else {
                     // Fallback: nome template + data odierna
                     const baseName = item.tpl.file
                         ? item.tpl.file.replace(/\.docx$/i, '').replace(/\//g, '-').replace(/[\\:*?"<>|]/g, '-')
                         : item.tpl.name.replace(/[^a-zA-Z0-9_\-]/g, '_');
-                    filename = `${baseName}_${today.replace(/\//g, '-')}.docx`;
+                    filename = `${baseName}.docx`;
                 }
 
                 if (item.tpl.file) {
@@ -247,6 +256,7 @@ Object.assign(generator, {
                     continue;
                 }
 
+                // ── Scarica DOCX ──
                 const link    = document.createElement('a');
                 link.href     = URL.createObjectURL(blob);
                 link.download = filename;
@@ -255,6 +265,51 @@ Object.assign(generator, {
 
                 generated.push({ name: filename, template: item.tpl.name, date: today });
                 generator._pendingBlobs[filename] = blob;
+
+                // ── Genera PDF dal docx compilato con mammoth → jsPDF ──
+                try {
+                    const pdfFilename = filename.replace(/\.docx$/i, '.pdf');
+                    const arrBuf = await blob.arrayBuffer();
+                    const mmResult = await mammoth.convertToHtml({ arrayBuffer: arrBuf });
+                    const htmlText = mmResult.value || '';
+
+                    // Estrai testo pulito dall'HTML
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = htmlText;
+                    const lines = [];
+                    tmp.querySelectorAll('p, li, h1, h2, h3, h4, td').forEach(el => {
+                        const t = el.innerText.trim();
+                        if (t) lines.push(t);
+                    });
+
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+                    pdf.setFont('helvetica');
+                    pdf.setFontSize(11);
+                    const margin = 25;
+                    const pageW  = 210 - margin * 2;
+                    let y = 20;
+                    for (const line of lines) {
+                        const wrapped = pdf.splitTextToSize(line, pageW);
+                        for (const wl of wrapped) {
+                            if (y > 277) { pdf.addPage(); y = 20; }
+                            pdf.text(wl, margin, y);
+                            y += 6;
+                        }
+                        y += 2; // spazio tra paragrafi
+                    }
+                    const pdfBlob = pdf.output('blob');
+
+                    // Scarica PDF
+                    const pdfLink    = document.createElement('a');
+                    pdfLink.href     = URL.createObjectURL(pdfBlob);
+                    pdfLink.download = pdfFilename;
+                    pdfLink.click();
+                    URL.revokeObjectURL(pdfLink.href);
+
+                    generator._pendingBlobs[pdfFilename] = pdfBlob;
+                    generated.push({ name: pdfFilename, template: item.tpl.name, date: today });
+                } catch(pdfErr) { console.warn('PDF non generato:', pdfErr); }
 
                 let filledText = item.tpl.body || '';
                 filledText = generator.replaceTags(filledText, data).replace(/\[[^\]]+\]/g, '');
